@@ -128,6 +128,16 @@ class ShapesDataset(utils.Dataset):
         class_ids = np.array([self.class_names.index(s[0]) for s in shapes])
         return mask, class_ids.astype(np.int32)
 
+    def load_bbox(self, image_id):
+        info = self.image_info[image_id]
+        shapes = info['shapes']
+        bbox = np.zeros((len(shapes), 4))
+        for i, (shape, _, dims) in enumerate(shapes):
+            x, y, s = dims
+            bbox[i] = [y - s, x - s, y + s, x + s]
+        class_ids = np.array([self.class_names.index(s[0]) for s in shapes])
+        return bbox, class_ids.astype(np.int32)
+
     def draw_shape(self, image, shape, dims, color):
         """Draws a shape from the given specs."""
         # Get the center x, y and the size s

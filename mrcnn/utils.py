@@ -101,7 +101,7 @@ def compute_overlaps_masks(masks1, masks2):
     """Computes IoU overlaps between two sets of masks.
     masks1, masks2: [Height, Width, instances]
     """
-    
+
     # If either set of masks is empty return empty result
     if masks1.shape[-1] == 0 or masks2.shape[-1] == 0:
         return np.zeros((masks1.shape[-1], masks2.shape[-1]))
@@ -384,6 +384,25 @@ class Dataset(object):
         class_ids = np.empty([0], np.int32)
         return mask, class_ids
 
+    def load_bbox(self, image_id):
+        """Load instance bbox for the given image.
+
+        Different datasets use different ways to store masks. Override this
+        method to load instance masks and return them in the form of am
+        array of binary masks of shape [height, width, instances].
+
+        Returns:
+            masks: A bool array of shape [height, width, instance count] with
+                a binary mask per instance.
+            class_ids: a 1D array of class IDs of the instance masks.
+        """
+        # Override this function to load a mask from your dataset.
+        # Otherwise, it returns an empty mask.
+        logging.warning("You are using the default load_bbox(), maybe you need to define your own one.")
+        bbox = np.empty([0, 0, 0])
+        class_ids = np.empty([0], np.int32)
+        return bbox, class_ids
+
 
 def resize_image(image, min_dim=None, max_dim=None, min_scale=None, mode="square"):
     """Resizes an image keeping the aspect ratio unchanged.
@@ -653,8 +672,11 @@ def trim_zeros(x):
     return x[~np.all(x == 0, axis=1)]
 
 
-def compute_matches(gt_boxes, gt_class_ids, gt_masks,
-                    pred_boxes, pred_class_ids, pred_scores, pred_masks,
+# def compute_matches(gt_boxes, gt_class_ids, gt_masks,
+#                     pred_boxes, pred_class_ids, pred_scores, pred_masks,
+#                     iou_threshold=0.5, score_threshold=0.0):
+def compute_matches(gt_boxes, gt_class_ids,
+                    pred_boxes, pred_class_ids, pred_scores,
                     iou_threshold=0.5, score_threshold=0.0):
     """Finds matches between prediction and ground truth instances.
 
@@ -668,7 +690,7 @@ def compute_matches(gt_boxes, gt_class_ids, gt_masks,
     # Trim zero padding
     # TODO: cleaner to do zero unpadding upstream
     gt_boxes = trim_zeros(gt_boxes)
-    gt_masks = gt_masks[..., :gt_boxes.shape[0]]
+    # gt_masks = gt_masks[..., :gt_boxes.shape[0]]
     pred_boxes = trim_zeros(pred_boxes)
     pred_scores = pred_scores[:pred_boxes.shape[0]]
     # Sort predictions by score from high to low
@@ -676,10 +698,11 @@ def compute_matches(gt_boxes, gt_class_ids, gt_masks,
     pred_boxes = pred_boxes[indices]
     pred_class_ids = pred_class_ids[indices]
     pred_scores = pred_scores[indices]
-    pred_masks = pred_masks[..., indices]
+    # pred_masks = pred_masks[..., indices]
 
     # Compute IoU overlaps [pred_masks, gt_masks]
-    overlaps = compute_overlaps_masks(pred_masks, gt_masks)
+    # overlaps = compute_overlaps_masks(pred_masks, gt_masks)
+    overlaps = compute_overlaps(pred_boxes, gt_boxes)
 
     # Loop through predictions and find matching ground truth boxes
     match_count = 0
@@ -712,8 +735,11 @@ def compute_matches(gt_boxes, gt_class_ids, gt_masks,
     return gt_match, pred_match, overlaps
 
 
-def compute_ap(gt_boxes, gt_class_ids, gt_masks,
-               pred_boxes, pred_class_ids, pred_scores, pred_masks,
+# def compute_ap(gt_boxes, gt_class_ids, gt_masks,
+#                pred_boxes, pred_class_ids, pred_scores, pred_masks,
+#                iou_threshold=0.5):
+def compute_ap(gt_boxes, gt_class_ids,
+               pred_boxes, pred_class_ids, pred_scores,
                iou_threshold=0.5):
     """Compute Average Precision at a set IoU threshold (default 0.5).
 
@@ -724,9 +750,13 @@ def compute_ap(gt_boxes, gt_class_ids, gt_masks,
     overlaps: [pred_boxes, gt_boxes] IoU overlaps.
     """
     # Get matches and overlaps
+    # gt_match, pred_match, overlaps = compute_matches(
+    #     gt_boxes, gt_class_ids, gt_masks,
+    #     pred_boxes, pred_class_ids, pred_scores, pred_masks,
+    #     iou_threshold)
     gt_match, pred_match, overlaps = compute_matches(
-        gt_boxes, gt_class_ids, gt_masks,
-        pred_boxes, pred_class_ids, pred_scores, pred_masks,
+        gt_boxes, gt_class_ids,
+        pred_boxes, pred_class_ids, pred_scores,
         iou_threshold)
 
     # Compute precision and recall at each prediction box step
@@ -757,7 +787,7 @@ def compute_ap_range(gt_box, gt_class_id, gt_mask,
     """Compute AP over a range or IoU thresholds. Default range is 0.5-0.95."""
     # Default is 0.5 to 0.95 with increments of 0.05
     iou_thresholds = iou_thresholds or np.arange(0.5, 1.0, 0.05)
-    
+
     # Compute AP over range of IoU thresholds
     AP = []
     for iou_threshold in iou_thresholds:
